@@ -1,0 +1,100 @@
+{
+  "root_tsconfig": {
+    "compilerOptions": {
+      "target": "ES2022",
+      "lib": ["ES2022"],
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "declaration": true,
+      "outDir": "./dist",
+      "strict": true,
+      "esModuleInterop": true,
+      "skipLibCheck": true,
+      "forceConsistentCasingInFileNames": true,
+      "resolveJsonModule": true
+    },
+    "exclude": ["node_modules", "dist"]
+  },
+  
+  "packages_core_tsconfig": {
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+      "rootDir": "./src"
+    },
+    "include": ["src/**/*"]
+  },
+  
+  "packages_pdf_engine_tsconfig": {
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+      "rootDir": "./src"
+    },
+    "include": ["src/**/*"],
+    "references": [
+      { "path": "../core" }
+    ]
+  },
+  
+  "packages_ai_engine_tsconfig": {
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+      "rootDir": "./src"
+    },
+    "include": ["src/**/*"],
+    "references": [
+      { "path": "../core" }
+    ]
+  },
+  
+  "packages_db_tsconfig": {
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+      "rootDir": "./src"
+    },
+    "include": ["src/**/*"],
+    "references": [
+      { "path": "../core" }
+    ]
+  },
+  
+  "apps_workers_tsconfig": {
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+      "rootDir": "./src"
+    },
+    "include": ["src/**/*"],
+    "references": [
+      { "path": "../../packages/core" },
+      { "path": "../../packages/pdf-engine" },
+      { "path": "../../packages/ai-engine" }
+    ]
+  },
+  
+  "apps_web_tsconfig": {
+    "compilerOptions": {
+      "target": "ES2017",
+      "lib": ["dom", "dom.iterable", "esnext"],
+      "allowJs": true,
+      "skipLibCheck": true,
+      "strict": true,
+      "noEmit": true,
+      "esModuleInterop": true,
+      "module": "esnext",
+      "moduleResolution": "bundler",
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      "jsx": "preserve",
+      "incremental": true,
+      "plugins": [
+        {
+          "name": "next"
+        }
+      ],
+      "paths": {
+        "@/*": ["./*"]
+      }
+    },
+    "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+    "exclude": ["node_modules"]
+  }
+}

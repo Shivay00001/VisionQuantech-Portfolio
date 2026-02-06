@@ -1,0 +1,141 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: worldmind_db
+    environment:
+      POSTGRES_USER: worldmind
+      POSTGRES_PASSWORD: worldmind123
+      POSTGRES_DB: worldmind
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U worldmind"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worldmind_network
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: worldmind_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worldmind_network
+
+  # FastAPI Backend
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: worldmind_api
+    environment:
+      DATABASE_URL: postgresql://worldmind:worldmind123@db:5432/worldmind
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-here-change-in-production}
+      API_KEY: ${API_KEY:-dev-api-key}
+      DEBUG: ${DEBUG:-false}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      ORACLE_ENABLED: ${ORACLE_ENABLED:-false}
+      ETHEREUM_RPC: ${ETHEREUM_RPC:-}
+      ORACLE_PRIVATE_KEY: ${ORACLE_PRIVATE_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - worldmind_network
+
+  # RQ Worker for Background Jobs
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: worldmind_worker
+    environment:
+      DATABASE_URL: postgresql://worldmind:worldmind123@db:5432/worldmind
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-here-change-in-production}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: rq worker scraping analysis oracle --url redis://redis:6379/0
+    networks:
+      - worldmind_network
+    deploy:
+      replicas: 2
+
+  # Oracle Service (Optional - Blockchain Integration)
+  oracle:
+    build:
+      context: ./oracle
+      dockerfile: Dockerfile
+    container_name: worldmind_oracle
+    environment:
+      ETHEREUM_RPC: ${ETHEREUM_RPC:-}
+      ORACLE_PRIVATE_KEY: ${ORACLE_PRIVATE_KEY:-}
+      GUARDIAN_CONTRACT: ${GUARDIAN_CONTRACT:-}
+      DAO_CONTRACT: ${DAO_CONTRACT:-}
+      CHAIN_ID: ${CHAIN_ID:-1}
+      DATABASE_URL: postgresql://worldmind:worldmind123@db:5432/worldmind
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+      - api
+    profiles:
+      - oracle
+    networks:
+      - worldmind_network
+
+  # Frontend (Optional - can be served separately)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: worldmind_frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - worldmind_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  worldmind_network:
+    driver: bridge

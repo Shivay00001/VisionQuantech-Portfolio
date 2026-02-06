@@ -1,0 +1,589 @@
+# ============================================================================
+# FILE 1: infrastructure/docker/docker-compose.yml (Production)
+# ============================================================================
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: visionwire_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - visionwire_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: visionwire_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - visionwire_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: visionwire_qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+    networks:
+      - visionwire_network
+
+  # Typesense Search Engine
+  typesense:
+    image: typesense/typesense:0.25.1
+    container_name: visionwire_typesense
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
+    volumes:
+      - typesense_data:/data
+    ports:
+      - "8108:8108"
+    networks:
+      - visionwire_network
+
+  # Backend API (FastAPI)
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: visionwire_backend
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - TYPESENSE_HOST=typesense
+    volumes:
+      - ../../backend:/app
+      - backend_storage:/var/visionwire/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - visionwire_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Content Generation Worker
+  worker_content:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: visionwire_worker_content
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    volumes:
+      - ../../backend:/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - visionwire_network
+    command: celery -A app.workers.celery_app worker --loglevel=info --queues=content_generation
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: visionwire_frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - visionwire_network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: visionwire_nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - visionwire_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  typesense_data:
+  backend_storage:
+
+networks:
+  visionwire_network:
+    driver: bridge
+
+# ============================================================================
+# FILE 2: infrastructure/docker/docker-compose.dev.yml (Development)
+# ============================================================================
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: visionwire_postgres_dev
+    environment:
+      POSTGRES_USER: visionwire
+      POSTGRES_PASSWORD: visionwire_dev
+      POSTGRES_DB: visionwire_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: visionwire_redis_dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: visionwire_qdrant_dev
+    ports:
+      - "6333:6333"
+
+  typesense:
+    image: typesense/typesense:0.25.1
+    container_name: visionwire_typesense_dev
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: xyz
+    ports:
+      - "8108:8108"
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+# ============================================================================
+# FILE 3: backend/Dockerfile
+# ============================================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create storage directory
+RUN mkdir -p /var/visionwire/storage
+
+# Expose port
+EXPOSE 8000
+
+# Run migrations and start server
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+
+# ============================================================================
+# FILE 4: frontend/Dockerfile
+# ============================================================================
+FROM node:20-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+RUN npm run build
+
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV production
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
+
+# Automatically leverage output traces to reduce image size
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+
+CMD ["node", "server.js"]
+
+# ============================================================================
+# FILE 5: infrastructure/docker/nginx.conf
+# ============================================================================
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream backend {
+        server backend:8000;
+    }
+
+    upstream frontend {
+        server frontend:3000;
+    }
+
+    server {
+        listen 80;
+        server_name localhost;
+
+        # Frontend routes
+        location / {
+            proxy_pass http://frontend;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+        }
+
+        # API routes
+        location /api/ {
+            proxy_pass http://backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # CORS headers
+            add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS";
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type";
+        }
+
+        # WebSocket support
+        location /ws {
+            proxy_pass http://backend;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+
+        # Static files
+        location /static/ {
+            alias /var/visionwire/storage/;
+        }
+    }
+}
+
+# ============================================================================
+# FILE 6: scripts/deploy.sh
+# ============================================================================
+#!/bin/bash
+
+echo "🚀 VisionWire Deployment Script"
+echo "================================"
+
+# Load environment variables
+if [ -f .env ]; then
+    export $(cat .env | grep -v '#' | awk '/=/ {print $1}')
+fi
+
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    echo "❌ Docker is not installed. Please install Docker first."
+    exit 1
+fi
+
+# Check if Docker Compose is installed
+if ! command -v docker-compose &> /dev/null; then
+    echo "❌ Docker Compose is not installed. Please install Docker Compose first."
+    exit 1
+fi
+
+echo "✅ Docker and Docker Compose are installed"
+
+# Choose deployment mode
+echo ""
+echo "Select deployment mode:"
+echo "1) Development (local)"
+echo "2) Production"
+read -p "Enter choice [1-2]: " mode
+
+if [ "$mode" == "1" ]; then
+    COMPOSE_FILE="infrastructure/docker/docker-compose.dev.yml"
+    echo "📦 Starting development environment..."
+else
+    COMPOSE_FILE="infrastructure/docker/docker-compose.yml"
+    echo "🏭 Starting production environment..."
+fi
+
+# Pull latest images
+echo "📥 Pulling Docker images..."
+docker-compose -f $COMPOSE_FILE pull
+
+# Build services
+echo "🔨 Building services..."
+docker-compose -f $COMPOSE_FILE build
+
+# Start services
+echo "🚀 Starting services..."
+docker-compose -f $COMPOSE_FILE up -d
+
+# Wait for services to be healthy
+echo "⏳ Waiting for services to be ready..."
+sleep 10
+
+# Check service status
+echo ""
+echo "📊 Service Status:"
+docker-compose -f $COMPOSE_FILE ps
+
+# Run database migrations
+echo ""
+echo "🔄 Running database migrations..."
+docker-compose -f $COMPOSE_FILE exec backend alembic upgrade head
+
+# Seed database (optional)
+read -p "Do you want to seed the database with initial data? (y/n): " seed
+if [ "$seed" == "y" ]; then
+    echo "🌱 Seeding database..."
+    docker-compose -f $COMPOSE_FILE exec backend python scripts/seed-database.py
+fi
+
+echo ""
+echo "✨ Deployment complete!"
+echo ""
+echo "📍 Access points:"
+echo "   Frontend: http://localhost:3000"
+echo "   Backend API: http://localhost:8000"
+echo "   API Docs: http://localhost:8000/docs"
+echo ""
+echo "📝 View logs:"
+echo "   docker-compose -f $COMPOSE_FILE logs -f"
+echo ""
+echo "🛑 Stop services:"
+echo "   docker-compose -f $COMPOSE_FILE down"
+
+# ============================================================================
+# FILE 7: scripts/seed-database.py
+# ============================================================================
+#!/usr/bin/env python3
+"""
+Database seeding script for VisionWire
+Creates initial boards, subjects, and demo users
+"""
+
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.database import SessionLocal, init_db
+from app.models import Board, Subject, Chapter, Topic, User, UserRole
+from app.core.security import get_password_hash
+
+def seed_database():
+    """Seed database with initial data"""
+    
+    db = SessionLocal()
+    
+    try:
+        print("🌱 Seeding database...")
+        
+        # Create boards
+        boards_data = [
+            {"code": "CBSE", "name": "Central Board of Secondary Education", "country": "India"},
+            {"code": "ICSE", "name": "Indian Certificate of Secondary Education", "country": "India"},
+            {"code": "JEE", "name": "Joint Entrance Examination", "country": "India"},
+            {"code": "NEET", "name": "National Eligibility cum Entrance Test", "country": "India"},
+        ]
+        
+        boards = []
+        for board_data in boards_data:
+            board = Board(**board_data)
+            db.add(board)
+            boards.append(board)
+        
+        db.commit()
+        print(f"✅ Created {len(boards)} boards")
+        
+        # Create subjects for CBSE Class 10
+        cbse_board = db.query(Board).filter(Board.code == "CBSE").first()
+        
+        subjects_data = [
+            {"code": "MATH", "name": "Mathematics", "grade_level": 10, "color_code": "#3B82F6"},
+            {"code": "PHY", "name": "Physics", "grade_level": 10, "color_code": "#8B5CF6"},
+            {"code": "CHEM", "name": "Chemistry", "grade_level": 10, "color_code": "#10B981"},
+            {"code": "BIO", "name": "Biology", "grade_level": 10, "color_code": "#EC4899"},
+        ]
+        
+        subjects = []
+        for i, subject_data in enumerate(subjects_data):
+            subject = Subject(
+                board_id=cbse_board.id,
+                order=i,
+                **subject_data
+            )
+            db.add(subject)
+            subjects.append(subject)
+        
+        db.commit()
+        print(f"✅ Created {len(subjects)} subjects")
+        
+        # Create demo users
+        demo_users = [
+            {
+                "email": "admin@visionwire.com",
+                "password": "Admin@123",
+                "full_name": "Admin User",
+                "role": UserRole.ADMIN
+            },
+            {
+                "email": "teacher@visionwire.com",
+                "password": "Teacher@123",
+                "full_name": "Demo Teacher",
+                "role": UserRole.TEACHER
+            },
+            {
+                "email": "student@visionwire.com",
+                "password": "Student@123",
+                "full_name": "Demo Student",
+                "role": UserRole.STUDENT,
+                "grade_level": 10
+            }
+        ]
+        
+        for user_data in demo_users:
+            password = user_data.pop("password")
+            user = User(
+                username=user_data["email"].split("@")[0],
+                hashed_password=get_password_hash(password),
+                **user_data
+            )
+            db.add(user)
+        
+        db.commit()
+        print(f"✅ Created {len(demo_users)} demo users")
+        
+        print("\n✨ Database seeding complete!")
+        print("\n📝 Demo credentials:")
+        print("   Admin: admin@visionwire.com / Admin@123")
+        print("   Teacher: teacher@visionwire.com / Teacher@123")
+        print("   Student: student@visionwire.com / Student@123")
+        
+    except Exception as e:
+        print(f"❌ Error seeding database: {e}")
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    init_db()
+    seed_database()
+
+# ============================================================================
+# FILE 8: .dockerignore
+# ============================================================================
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Testing
+.pytest_cache/
+coverage/
+.coverage
+
+# Documentation
+docs/
+*.md

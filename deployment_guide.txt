@@ -1,0 +1,487 @@
+# Complete Deployment Guide - Neon Beat Dash
+
+## 🎯 Quick Start Checklist
+
+- [ ] Node.js 18+ installed
+- [ ] Git installed
+- [ ] Supabase account created
+- [ ] Database schema deployed
+- [ ] Environment variables configured
+- [ ] Game tested locally
+- [ ] Web deployment completed
+- [ ] Android build tested (optional)
+
+## Part 1: Local Development Setup
+
+### Step 1: Create Project Structure
+
+```bash
+mkdir neon-beat-dash
+cd neon-beat-dash
+mkdir -p game/src/{scenes,core,services,ui,assets}
+mkdir -p game/public/icons
+mkdir -p mobile
+mkdir -p infra
+```
+
+### Step 2: Copy All Files
+
+Copy all the provided files into their respective folders according to the structure shown in README.md.
+
+### Step 3: Install Dependencies
+
+```bash
+cd game
+npm install
+```
+
+### Step 4: Generate Icons
+
+1. Open `game/public/icons/generate-icons.html` in your browser
+2. Right-click each canvas and save as:
+   - `icon-192.png` (192x192)
+   - `icon-512.png` (512x512)
+3. Place the saved icons in `game/public/icons/`
+
+### Step 5: Create favicon.ico
+
+Use an online converter to convert `icon-192.png` to `favicon.ico` and place it in `game/public/`
+
+---
+
+## Part 2: Supabase Backend Setup
+
+### Step 1: Create Supabase Project
+
+1. Go to https://supabase.com
+2. Sign up / Log in
+3. Click "New Project"
+4. Fill in:
+   - **Name**: neon-beat-dash
+   - **Database Password**: (generate strong password)
+   - **Region**: (choose closest to your users)
+5. Wait for project to be created (~2 minutes)
+
+### Step 2: Deploy Database Schema
+
+1. In Supabase Dashboard, go to **SQL Editor**
+2. Click **New Query**
+3. Copy the entire content of `supabase-schema.sql`
+4. Paste into the SQL Editor
+5. Click **Run** (or press Cmd/Ctrl + Enter)
+6. Verify success - you should see: "Success. No rows returned"
+
+### Step 3: Get API Credentials
+
+1. Go to **Project Settings** → **API**
+2. Copy these values:
+   - **Project URL** (e.g., `https://xxxxx.supabase.co`)
+   - **anon public** key (long string starting with `eyJ...`)
+
+### Step 4: Configure Environment Variables
+
+Create `game/.env` file:
+
+```bash
+cd game
+cp .env.example .env
+```
+
+Edit `.env` and add your credentials:
+
+```env
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Important**: Never commit `.env` to git!
+
+### Step 5: Test Database Connection
+
+```bash
+cd game
+npm run dev
+```
+
+Open http://localhost:5173 and click PLAY. After game over, check if your score appears on leaderboard.
+
+---
+
+## Part 3: Web Deployment
+
+### Option A: Netlify (Recommended)
+
+#### Method 1: Netlify CLI
+
+```bash
+# Install Netlify CLI globally
+npm install -g netlify-cli
+
+# Login to Netlify
+netlify login
+
+# Build the game
+cd game
+npm run build
+
+# Deploy
+netlify deploy --prod --dir=dist
+```
+
+#### Method 2: Netlify UI
+
+1. Push code to GitHub:
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/yourusername/neon-beat-dash.git
+git push -u origin main
+```
+
+2. Go to https://app.netlify.com
+3. Click **Add new site** → **Import an existing project**
+4. Connect to GitHub and select your repository
+5. Configure build settings:
+   - **Base directory**: `game`
+   - **Build command**: `npm run build`
+   - **Publish directory**: `game/dist`
+6. Add environment variables:
+   - Go to **Site settings** → **Environment variables**
+   - Add `VITE_SUPABASE_URL`
+   - Add `VITE_SUPABASE_ANON_KEY`
+7. Click **Deploy site**
+
+#### Method 3: Drag & Drop
+
+```bash
+cd game
+npm run build
+```
+
+Go to https://app.netlify.com/drop and drag the `game/dist` folder.
+
+**Note**: Environment variables must be baked into build for this method. Edit `game/.env` before building.
+
+### Option B: Vercel
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy
+cd game
+npm run build
+vercel --prod
+
+# Or link to Git (recommended)
+vercel link
+vercel --prod
+```
+
+Add environment variables in Vercel dashboard:
+1. Go to project settings
+2. Environment Variables
+3. Add both Supabase variables
+
+### Option C: GitHub Pages
+
+```bash
+# Install gh-pages
+cd game
+npm install --save-dev gh-pages
+
+# Add to package.json scripts:
+"predeploy": "npm run build",
+"deploy": "gh-pages -d dist"
+
+# Deploy
+npm run deploy
+```
+
+Configure `vite.config.ts` base path:
+```typescript
+base: '/neon-beat-dash/', // Your repo name
+```
+
+### Option D: Cloudflare Pages
+
+1. Push to GitHub
+2. Go to https://dash.cloudflare.com
+3. Pages → Create a project
+4. Connect GitHub repository
+5. Build settings:
+   - **Build command**: `cd game && npm run build`
+   - **Build output directory**: `game/dist`
+6. Add environment variables
+7. Deploy
+
+---
+
+## Part 4: Android APK Build
+
+### Prerequisites
+
+- Android Studio installed
+- JDK 11+ installed
+- Android SDK (API 22+)
+
+### Step 1: Install Capacitor
+
+```bash
+cd mobile
+npm install
+```
+
+### Step 2: Build Web App
+
+```bash
+npm run build:mobile
+```
+
+This command:
+1. Builds the web game
+2. Copies it to Capacitor mobile project
+
+### Step 3: Sync with Capacitor
+
+```bash
+npx cap sync android
+```
+
+### Step 4: Configure Android App
+
+Edit `mobile/capacitor.config.ts`:
+
+```typescript
+appId: 'com.yourcompany.neonbeatdash', // Change this!
+appName: 'Neon Beat Dash',
+```
+
+Edit `mobile/android/app/src/main/res/values/strings.xml`:
+
+```xml
+<string name="app_name">Neon Beat Dash</string>
+<string name="title_activity_main">Neon Beat Dash</string>
+```
+
+### Step 5: Add App Icons
+
+Place icons in these folders (create if missing):
+
+```
+mobile/android/app/src/main/res/
+├── mipmap-mdpi/ic_launcher.png (48x48)
+├── mipmap-hdpi/ic_launcher.png (72x72)
+├── mipmap-xhdpi/ic_launcher.png (96x96)
+├── mipmap-xxhdpi/ic_launcher.png (144x144)
+└── mipmap-xxxhdpi/ic_launcher.png (192x192)
+```
+
+Use Android Asset Studio: https://romannurik.github.io/AndroidAssetStudio/icons-launcher.html
+
+### Step 6: Open in Android Studio
+
+```bash
+npx cap open android
+```
+
+### Step 7: Build Release APK
+
+1. In Android Studio: **Build** → **Generate Signed Bundle / APK**
+2. Select **APK**
+3. Create new keystore:
+   - **Key store path**: Choose location (e.g., `neon-beat-dash-key.jks`)
+   - **Password**: Create strong password
+   - **Alias**: `neonbeatdash`
+   - **Validity**: 25 years
+   - **Certificate info**: Fill your details
+4. Click **Next**
+5. Select **release** build variant
+6. Check both signature versions (V1 and V2)
+7. Click **Finish**
+
+### Step 8: Find Your APK
+
+APK location: `mobile/android/app/build/outputs/apk/release/app-release.apk`
+
+### Step 9: Test APK
+
+```bash
+# Install on connected device/emulator
+adb install mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+---
+
+## Part 5: Post-Deployment
+
+### Testing Checklist
+
+- [ ] Game loads without errors
+- [ ] All scenes work (Menu, Game, GameOver)
+- [ ] Controls responsive (touch/keyboard)
+- [ ] Score submission works
+- [ ] Leaderboard loads
+- [ ] Daily challenge works
+- [ ] PWA installable
+- [ ] Offline mode works
+- [ ] Share button works
+
+### Performance Optimization
+
+1. **Enable compression** (already configured in netlify.toml)
+2. **Check Lighthouse score**:
+   - Open site in Chrome
+   - Press F12 → Lighthouse
+   - Run audit
+   - Aim for 90+ on all metrics
+
+3. **Monitor bundle size**:
+```bash
+cd game
+npm run build
+npx vite-bundle-visualizer
+```
+
+### Monitoring
+
+1. **Supabase Dashboard**:
+   - Monitor database usage
+   - Check API requests
+   - Review slow queries
+
+2. **Netlify Analytics** (paid):
+   - Pageviews
+   - Unique visitors
+   - Top pages
+
+3. **Google Analytics** (optional):
+```bash
+# Install
+npm install @analytics/google-analytics
+
+# Add to game/src/main.ts
+```
+
+---
+
+## Part 6: Distribution
+
+### Android
+
+1. **Google Play Console**:
+   - Create developer account ($25 one-time)
+   - Create new app
+   - Upload AAB (not APK for Play Store)
+   - Fill store listing
+   - Submit for review
+
+2. **Direct Distribution**:
+   - Host APK on your website
+   - Share download link
+   - Users need "Install from Unknown Sources" enabled
+
+### Web
+
+1. **SEO Optimization**:
+   - Add meta tags in index.html
+   - Create sitemap.xml
+   - Submit to Google Search Console
+
+2. **Social Sharing**:
+   - Add Open Graph tags
+   - Create Twitter Card
+   - Generate share images
+
+---
+
+## Troubleshooting
+
+### Build Errors
+
+**Error**: "Cannot find module 'phaser'"
+```bash
+cd game
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**Error**: "Supabase connection failed"
+- Verify `.env` file exists and has correct values
+- Check Supabase project is not paused
+- Verify API key is anon key (not service role key)
+
+### Deployment Errors
+
+**Netlify**: Build fails
+- Check Node version in netlify.toml
+- Verify build command is correct
+- Check environment variables are set
+
+**Vercel**: 404 on routes
+- Configure rewrites in vercel.json
+- Check output directory
+
+### Android Build Errors
+
+**Gradle sync failed**:
+```bash
+cd mobile/android
+./gradlew clean
+./gradlew build
+```
+
+**SDK not found**:
+- Open Android Studio settings
+- SDK Manager → Install Android SDK
+- Set ANDROID_HOME environment variable
+
+---
+
+## Maintenance
+
+### Regular Tasks
+
+1. **Update dependencies** (monthly):
+```bash
+cd game
+npm update
+npm audit fix
+```
+
+2. **Monitor Supabase usage**:
+   - Check database size
+   - Review API quota
+   - Clean old scores if needed
+
+3. **Backup database**:
+   - Supabase Dashboard → Database → Backup
+
+4. **Update game version**:
+```json
+// game/package.json
+"version": "1.1.0"
+```
+
+### Adding Features
+
+1. Create feature branch
+2. Test locally
+3. Deploy to staging (Netlify branch deploy)
+4. Test on staging
+5. Merge to main
+6. Auto-deploys to production
+
+---
+
+## Support & Resources
+
+- **Phaser 3 Docs**: https://photonstorm.github.io/phaser3-docs/
+- **Supabase Docs**: https://supabase.com/docs
+- **Capacitor Docs**: https://capacitorjs.com/docs
+- **Vite Docs**: https://vitejs.dev/guide/
+
+---
+
+**Congratulations!** 🎉 Your game is now live and playable worldwide!

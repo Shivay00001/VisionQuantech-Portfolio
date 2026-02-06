@@ -1,0 +1,539 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract YOUDAO is ReentrancyGuard, Ownable {
+    
+    enum ProposalCategory {
+        Research,
+        Infrastructure,
+        Marketing,
+        Legal,
+        Partnership,
+        Treasury,
+        IPLicensing,
+        SuccessorTraining,
+        Emergency
+    }
+    
+    enum ProposalStatus {
+        Active,
+        Executed,
+        Cancelled,
+        Failed
+    }
+    
+    struct Proposal {
+        uint256 id;
+        string title;
+        string description;
+        address proposer;
+        uint256 amount;
+        address payable recipient;
+        uint256 createdAt;
+        uint256 votingEndsAt;
+        uint256 executionTime;
+        uint256 forVotes;
+        uint256 againstVotes;
+        bool executed;
+        bool cancelled;
+        ProposalCategory category;
+        bool aiApproved;
+        uint256 aiConfidence;
+        string aiReasoningHash;
+        ProposalStatus status;
+    }
+    
+    struct IPLicense {
+        uint256 id;
+        string ipName;
+        string ipType;
+        address licensee;
+        uint256 royaltyBps;
+        uint256 issuedAt;
+        uint256 expiresAt;
+        bool active;
+        uint256 totalRoyaltiesPaid;
+    }
+    
+    struct StakeInfo {
+        uint256 amount;
+        uint256 stakedAt;
+        uint256 visionAlignmentScore;
+    }
+    
+    uint256 public constant QUORUM_PERCENTAGE = 30;
+    uint256 public constant VOTING_PERIOD = 7 days;
+    uint256 public constant EXECUTION_DELAY = 2 days;
+    uint256 public constant MAX_COUNCIL_SIZE = 7;
+    uint256 public constant MIN_STAKE = 0.1 ether;
+    uint256 public constant ALIGNMENT_SCORE_MAX = 1000;
+    
+    uint256 public constant INNOVATION_ALLOCATION_BPS = 4000;
+    uint256 public constant SUCCESSOR_TRAINING_BPS = 3000;
+    uint256 public constant RESERVE_BPS = 3000;
+    
+    uint256 public proposalCount;
+    uint256 public licenseCount;
+    uint256 public totalStake;
+    
+    address public founderAddress;
+    address public aiGuardianAddress;
+    address public treasuryAddress;
+    
+    mapping(uint256 => Proposal) public proposals;
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
+    mapping(uint256 => mapping(address => uint256)) public voteWeight;
+    
+    mapping(address => StakeInfo) public stakes;
+    mapping(address => bool) public isCouncilMember;
+    address[] public councilMembers;
+    
+    mapping(uint256 => IPLicense) public licenses;
+    mapping(address => uint256[]) public licenseeToLicenses;
+    
+    event ProposalCreated(
+        uint256 indexed proposalId,
+        address indexed proposer,
+        string title,
+        ProposalCategory category,
+        uint256 amount,
+        uint256 votingEndsAt
+    );
+    
+    event VoteCast(
+        uint256 indexed proposalId,
+        address indexed voter,
+        bool support,
+        uint256 weight
+    );
+    
+    event ProposalExecuted(uint256 indexed proposalId, bool success);
+    event ProposalCancelled(uint256 indexed proposalId);
+    
+    event AIDecisionRecorded(
+        uint256 indexed proposalId,
+        bool approved,
+        uint256 confidence,
+        string reasoningHash
+    );
+    
+    event LicenseIssued(
+        uint256 indexed licenseId,
+        string ipName,
+        address indexed licensee,
+        uint256 royaltyBps
+    );
+    
+    event RoyaltyPaid(
+        uint256 indexed licenseId,
+        address indexed payer,
+        uint256 amount
+    );
+    
+    event StakeUpdated(
+        address indexed staker,
+        uint256 newAmount,
+        uint256 visionAlignmentScore
+    );
+    
+    event CouncilMemberAdded(address indexed member);
+    event CouncilMemberRemoved(address indexed member);
+    
+    modifier onlyFounder() {
+        require(msg.sender == founderAddress, "Only founder");
+        _;
+    }
+    
+    modifier onlyAIGuardian() {
+        require(msg.sender == aiGuardianAddress, "Only AI Guardian");
+        _;
+    }
+    
+    modifier onlyCouncil() {
+        require(isCouncilMember[msg.sender], "Only council");
+        _;
+    }
+    
+    modifier onlyFounderOrAI() {
+        require(
+            msg.sender == founderAddress || msg.sender == aiGuardianAddress,
+            "Only founder or AI"
+        );
+        _;
+    }
+    
+    constructor(
+        address _founder,
+        address _treasury
+    ) Ownable(_founder) {
+        founderAddress = _founder;
+        treasuryAddress = _treasury;
+    }
+    
+    function setAIGuardian(address _aiGuardian) external onlyFounder {
+        require(_aiGuardian != address(0), "Invalid address");
+        aiGuardianAddress = _aiGuardian;
+    }
+    
+    function setTreasury(address _treasury) external onlyFounder {
+        require(_treasury != address(0), "Invalid address");
+        treasuryAddress = _treasury;
+    }
+    
+    function stake() external payable {
+        require(msg.value >= MIN_STAKE, "Stake too low");
+        
+        StakeInfo storage stakeInfo = stakes[msg.sender];
+        stakeInfo.amount += msg.value;
+        stakeInfo.stakedAt = block.timestamp;
+        
+        if (stakeInfo.visionAlignmentScore == 0) {
+            stakeInfo.visionAlignmentScore = 500;
+        }
+        
+        totalStake += msg.value;
+        
+        emit StakeUpdated(msg.sender, stakeInfo.amount, stakeInfo.visionAlignmentScore);
+    }
+    
+    function unstake(uint256 amount) external nonReentrant {
+        StakeInfo storage stakeInfo = stakes[msg.sender];
+        require(stakeInfo.amount >= amount, "Insufficient stake");
+        
+        stakeInfo.amount -= amount;
+        totalStake -= amount;
+        
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Transfer failed");
+        
+        emit StakeUpdated(msg.sender, stakeInfo.amount, stakeInfo.visionAlignmentScore);
+    }
+    
+    function updateVisionAlignment(address staker, uint256 score) 
+        external 
+        onlyFounderOrAI 
+    {
+        require(score <= ALIGNMENT_SCORE_MAX, "Score too high");
+        require(stakes[staker].amount > 0, "Not a staker");
+        
+        stakes[staker].visionAlignmentScore = score;
+        
+        emit StakeUpdated(staker, stakes[staker].amount, score);
+    }
+    
+    function getVotingPower(address voter) public view returns (uint256) {
+        StakeInfo memory stakeInfo = stakes[voter];
+        if (stakeInfo.amount == 0) return 0;
+        
+        uint256 alignmentBonus = (stakeInfo.amount * stakeInfo.visionAlignmentScore) / ALIGNMENT_SCORE_MAX;
+        return stakeInfo.amount + alignmentBonus;
+    }
+    
+    function createProposal(
+        string calldata title,
+        string calldata description,
+        uint256 amount,
+        address payable recipient,
+        ProposalCategory category
+    ) external returns (uint256) {
+        require(stakes[msg.sender].amount >= MIN_STAKE, "Must be staker");
+        require(bytes(title).length > 0, "Empty title");
+        require(recipient != address(0), "Invalid recipient");
+        
+        proposalCount++;
+        uint256 proposalId = proposalCount;
+        
+        Proposal storage proposal = proposals[proposalId];
+        proposal.id = proposalId;
+        proposal.title = title;
+        proposal.description = description;
+        proposal.proposer = msg.sender;
+        proposal.amount = amount;
+        proposal.recipient = recipient;
+        proposal.createdAt = block.timestamp;
+        proposal.votingEndsAt = block.timestamp + VOTING_PERIOD;
+        proposal.executionTime = 0;
+        proposal.category = category;
+        proposal.status = ProposalStatus.Active;
+        
+        emit ProposalCreated(
+            proposalId,
+            msg.sender,
+            title,
+            category,
+            amount,
+            proposal.votingEndsAt
+        );
+        
+        return proposalId;
+    }
+    
+    function vote(uint256 proposalId, bool support) external {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.id != 0, "Proposal not found");
+        require(block.timestamp < proposal.votingEndsAt, "Voting ended");
+        require(!proposal.executed, "Already executed");
+        require(!hasVoted[proposalId][msg.sender], "Already voted");
+        
+        uint256 votePower = getVotingPower(msg.sender);
+        require(votePower > 0, "No voting power");
+        
+        hasVoted[proposalId][msg.sender] = true;
+        voteWeight[proposalId][msg.sender] = votePower;
+        
+        if (support) {
+            proposal.forVotes += votePower;
+        } else {
+            proposal.againstVotes += votePower;
+        }
+        
+        emit VoteCast(proposalId, msg.sender, support, votePower);
+    }
+    
+    function recordAIDecision(
+        uint256 proposalId,
+        bool approved,
+        uint256 confidence,
+        string calldata reasoningHash
+    ) external onlyAIGuardian {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.id != 0, "Proposal not found");
+        require(!proposal.executed, "Already executed");
+        
+        proposal.aiApproved = approved;
+        proposal.aiConfidence = confidence;
+        proposal.aiReasoningHash = reasoningHash;
+        
+        emit AIDecisionRecorded(proposalId, approved, confidence, reasoningHash);
+    }
+    
+    function executeProposal(uint256 proposalId) external nonReentrant {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.id != 0, "Proposal not found");
+        require(block.timestamp >= proposal.votingEndsAt, "Voting ongoing");
+        require(!proposal.executed, "Already executed");
+        require(!proposal.cancelled, "Cancelled");
+        
+        uint256 totalVotes = proposal.forVotes + proposal.againstVotes;
+        uint256 quorum = (totalStake * QUORUM_PERCENTAGE) / 100;
+        
+        require(totalVotes >= quorum, "Quorum not met");
+        
+        bool founderActive = true;
+        if (aiGuardianAddress != address(0)) {
+            (bool success, bytes memory data) = aiGuardianAddress.call(
+                abi.encodeWithSignature("isFounderActive()")
+            );
+            if (success && data.length > 0) {
+                founderActive = abi.decode(data, (bool));
+            }
+        }
+        
+        if (!founderActive) {
+            require(proposal.aiApproved, "AI approval required");
+            require(proposal.aiConfidence >= 70, "AI confidence too low");
+        }
+        
+        require(proposal.forVotes > proposal.againstVotes, "Proposal rejected");
+        
+        if (proposal.executionTime == 0) {
+            proposal.executionTime = block.timestamp + EXECUTION_DELAY;
+            return;
+        }
+        
+        require(block.timestamp >= proposal.executionTime, "Execution delay");
+        
+        proposal.executed = true;
+        proposal.status = ProposalStatus.Executed;
+        
+        bool success = true;
+        if (proposal.amount > 0 && proposal.recipient != address(0)) {
+            if (address(this).balance >= proposal.amount) {
+                (success, ) = proposal.recipient.call{value: proposal.amount}("");
+            } else {
+                success = false;
+            }
+        }
+        
+        if (!success) {
+            proposal.status = ProposalStatus.Failed;
+        }
+        
+        emit ProposalExecuted(proposalId, success);
+    }
+    
+    function cancelProposal(uint256 proposalId) external {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.id != 0, "Proposal not found");
+        require(
+            msg.sender == proposal.proposer || 
+            msg.sender == founderAddress || 
+            isCouncilMember[msg.sender],
+            "Not authorized"
+        );
+        require(!proposal.executed, "Already executed");
+        require(!proposal.cancelled, "Already cancelled");
+        
+        proposal.cancelled = true;
+        proposal.status = ProposalStatus.Cancelled;
+        
+        emit ProposalCancelled(proposalId);
+    }
+    
+    function issueLicense(
+        string calldata ipName,
+        string calldata ipType,
+        address licensee,
+        uint256 royaltyBps,
+        uint256 duration
+    ) external onlyFounderOrAI returns (uint256) {
+        require(licensee != address(0), "Invalid licensee");
+        require(royaltyBps <= 10000, "Invalid royalty");
+        require(duration > 0, "Invalid duration");
+        
+        licenseCount++;
+        uint256 licenseId = licenseCount;
+        
+        IPLicense storage license = licenses[licenseId];
+        license.id = licenseId;
+        license.ipName = ipName;
+        license.ipType = ipType;
+        license.licensee = licensee;
+        license.royaltyBps = royaltyBps;
+        license.issuedAt = block.timestamp;
+        license.expiresAt = block.timestamp + duration;
+        license.active = true;
+        license.totalRoyaltiesPaid = 0;
+        
+        licenseeToLicenses[licensee].push(licenseId);
+        
+        emit LicenseIssued(licenseId, ipName, licensee, royaltyBps);
+        
+        return licenseId;
+    }
+    
+    function payRoyalty(uint256 licenseId) external payable nonReentrant {
+        IPLicense storage license = licenses[licenseId];
+        require(license.id != 0, "License not found");
+        require(license.active, "License inactive");
+        require(block.timestamp < license.expiresAt, "License expired");
+        require(msg.value > 0, "No payment");
+        
+        license.totalRoyaltiesPaid += msg.value;
+        
+        (bool success, ) = treasuryAddress.call{value: msg.value}("");
+        require(success, "Transfer failed");
+        
+        emit RoyaltyPaid(licenseId, msg.sender, msg.value);
+    }
+    
+    function revokeLicense(uint256 licenseId) external onlyFounderOrAI {
+        IPLicense storage license = licenses[licenseId];
+        require(license.id != 0, "License not found");
+        require(license.active, "Already inactive");
+        
+        license.active = false;
+    }
+    
+    function addCouncilMember(address member) external onlyFounder {
+        require(member != address(0), "Invalid address");
+        require(!isCouncilMember[member], "Already member");
+        require(councilMembers.length < MAX_COUNCIL_SIZE, "Council full");
+        
+        isCouncilMember[member] = true;
+        councilMembers.push(member);
+        
+        emit CouncilMemberAdded(member);
+    }
+    
+    function removeCouncilMember(address member) external onlyFounder {
+        require(isCouncilMember[member], "Not a member");
+        
+        isCouncilMember[member] = false;
+        
+        for (uint256 i = 0; i < councilMembers.length; i++) {
+            if (councilMembers[i] == member) {
+                councilMembers[i] = councilMembers[councilMembers.length - 1];
+                councilMembers.pop();
+                break;
+            }
+        }
+        
+        emit CouncilMemberRemoved(member);
+    }
+    
+    function getProposal(uint256 proposalId) external view returns (
+        uint256 id,
+        string memory title,
+        string memory description,
+        address proposer,
+        uint256 amount,
+        address recipient,
+        uint256 createdAt,
+        uint256 votingEndsAt,
+        uint256 forVotes,
+        uint256 againstVotes,
+        bool executed,
+        ProposalCategory category,
+        bool aiApproved,
+        uint256 aiConfidence,
+        ProposalStatus status
+    ) {
+        Proposal memory p = proposals[proposalId];
+        return (
+            p.id,
+            p.title,
+            p.description,
+            p.proposer,
+            p.amount,
+            p.recipient,
+            p.createdAt,
+            p.votingEndsAt,
+            p.forVotes,
+            p.againstVotes,
+            p.executed,
+            p.category,
+            p.aiApproved,
+            p.aiConfidence,
+            p.status
+        );
+    }
+    
+    function getLicense(uint256 licenseId) external view returns (
+        uint256 id,
+        string memory ipName,
+        string memory ipType,
+        address licensee,
+        uint256 royaltyBps,
+        uint256 issuedAt,
+        uint256 expiresAt,
+        bool active,
+        uint256 totalRoyaltiesPaid
+    ) {
+        IPLicense memory l = licenses[licenseId];
+        return (
+            l.id,
+            l.ipName,
+            l.ipType,
+            l.licensee,
+            l.royaltyBps,
+            l.issuedAt,
+            l.expiresAt,
+            l.active,
+            l.totalRoyaltiesPaid
+        );
+    }
+    
+    function getLicensesByLicensee(address licensee) external view returns (uint256[] memory) {
+        return licenseeToLicenses[licensee];
+    }
+    
+    function getCouncilMembers() external view returns (address[] memory) {
+        return councilMembers;
+    }
+    
+    receive() external payable {}
+}

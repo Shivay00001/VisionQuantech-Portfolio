@@ -1,0 +1,466 @@
+# ============================================================================
+# FILE 1: backend/requirements.txt
+# ============================================================================
+# Core Framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+pydantic-settings==2.1.0
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Redis & Caching
+redis==5.0.1
+hiredis==2.3.2
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+bcrypt==4.1.2
+
+# AI & LLM
+anthropic==0.18.1
+openai==1.12.0
+httpx==0.26.0
+
+# Vector Database
+qdrant-client==1.7.3
+
+# Background Tasks
+celery==5.3.6
+flower==2.0.1
+
+# Monitoring & Logging
+python-json-logger==2.0.7
+sentry-sdk[fastapi]==1.40.4
+
+# Email
+python-email-validator==2.1.0
+emails==0.6
+
+# File Processing
+python-magic==0.4.27
+Pillow==10.2.0
+PyPDF2==3.0.1
+
+# Data Processing
+pandas==2.2.0
+numpy==1.26.3
+
+# Utilities
+python-dotenv==1.0.1
+httptools==0.6.1
+python-dateutil==2.8.2
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.4
+pytest-cov==4.1.0
+httpx==0.26.0
+
+# Development
+black==24.1.1
+flake8==7.0.0
+mypy==1.8.0
+isort==5.13.2
+
+# ============================================================================
+# FILE 2: README.md (Complete Documentation)
+# ============================================================================
+# VisionWire AI EdTech Platform
+
+![VisionWire Logo](https://via.placeholder.com/150x50/3B82F6/FFFFFF?text=VisionWire)
+
+## 🎯 Overview
+
+VisionWire is a **production-ready, enterprise-grade AI-powered EdTech platform** that revolutionizes personalized learning through intelligent content generation, adaptive assessments, and comprehensive analytics.
+
+### Key Features
+
+- 🤖 **AI-Powered Content Generation**: Automatic notes, summaries, quizzes, and diagrams
+- 📚 **Multi-Board Support**: CBSE, ICSE, JEE, NEET, State Boards
+- 🎓 **Role-Based Dashboards**: Student, Teacher, Parent, and Admin interfaces
+- 📊 **Advanced Analytics**: Real-time progress tracking and performance insights
+- 🏆 **Gamification**: XP points, badges, streaks, and leaderboards
+- 💬 **AI Tutor**: Context-aware doubt resolution assistant
+- 📱 **Responsive Design**: Works seamlessly on all devices
+- 🔐 **Enterprise Security**: JWT authentication, role-based access control
+- ⚡ **High Performance**: Redis caching, optimized queries, CDN support
+- 🐳 **Easy Deployment**: Complete Docker setup included
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Frontend (Next.js 15)                │
+│  Student Dashboard | Teacher Portal | Admin Panel       │
+└────────────────────┬────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────┐
+│              API Gateway (FastAPI)                       │
+│  Auth | Curriculum | Content | Assessments | Analytics  │
+└────────────────────┬────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────┐
+│                   Core Services                          │
+│  Curriculum Engine | Content Generator | Assessment      │
+│  Personalization | AI Tutor | Analytics Engine          │
+└─────────────┬──────────────────────────┬────────────────┘
+              │                          │
+┌─────────────▼───────┐    ┌────────────▼────────────────┐
+│   Database Layer    │    │   External Services         │
+│  PostgreSQL (Core)  │    │  Anthropic/OpenAI (LLM)     │
+│  Redis (Cache)      │    │  S3/R2 (Storage)            │
+│  Qdrant (Vectors)   │    │  Email/SMS (Notifications)  │
+└─────────────────────┘    └─────────────────────────────┘
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Docker** 20.10+ and **Docker Compose** 2.0+
+- **Node.js** 20+ (for local frontend development)
+- **Python** 3.11+ (for local backend development)
+- **Git**
+
+### Installation
+
+#### 1. Clone the Repository
+
+```bash
+git clone https://github.com/yourusername/visionwire-edtech.git
+cd visionwire-edtech
+```
+
+#### 2. Configure Environment
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your configuration
+nano .env
+```
+
+**Required Configuration:**
+- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` for AI features
+- `SECRET_KEY` for JWT authentication (generate with `openssl rand -hex 32`)
+- Database credentials
+- Email/SMS provider credentials (optional)
+
+#### 3. Deploy with Docker (Recommended)
+
+```bash
+# Make deploy script executable
+chmod +x scripts/deploy.sh
+
+# Run deployment
+./scripts/deploy.sh
+```
+
+**Or manually:**
+
+```bash
+# Start all services
+docker-compose -f infrastructure/docker/docker-compose.yml up -d
+
+# Run database migrations
+docker-compose exec backend alembic upgrade head
+
+# Seed initial data
+docker-compose exec backend python scripts/seed-database.py
+```
+
+#### 4. Access the Platform
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+- **Admin Panel**: http://localhost:3000/admin
+
+**Demo Credentials:**
+- Admin: `admin@visionwire.com` / `Admin@123`
+- Teacher: `teacher@visionwire.com` / `Teacher@123`
+- Student: `student@visionwire.com` / `Student@123`
+
+## 📁 Project Structure
+
+```
+visionwire-edtech/
+├── backend/                    # FastAPI Backend
+│   ├── app/
+│   │   ├── main.py            # Application entry point
+│   │   ├── config.py          # Configuration
+│   │   ├── database.py        # Database setup
+│   │   ├── models/            # SQLAlchemy models
+│   │   ├── schemas/           # Pydantic schemas
+│   │   ├── api/v1/            # API routes
+│   │   ├── services/          # Business logic
+│   │   ├── core/              # Core utilities
+│   │   └── workers/           # Background workers
+│   ├── alembic/               # Database migrations
+│   ├── tests/                 # Test suite
+│   ├── requirements.txt       # Python dependencies
+│   └── Dockerfile
+│
+├── frontend/                   # Next.js Frontend
+│   ├── src/
+│   │   ├── app/               # App router pages
+│   │   ├── components/        # React components
+│   │   ├── lib/               # Utilities
+│   │   ├── hooks/             # Custom hooks
+│   │   └── store/             # State management
+│   ├── public/                # Static assets
+│   ├── package.json
+│   └── Dockerfile
+│
+├── workers/                    # Separate worker services
+│   ├── content-generator/
+│   ├── video-generator/
+│   └── analytics-processor/
+│
+├── shared/                     # Shared configurations
+│   ├── curriculum-configs/
+│   └── content-templates/
+│
+├── infrastructure/             # DevOps & Infrastructure
+│   ├── docker/
+│   │   ├── docker-compose.yml
+│   │   └── nginx.conf
+│   ├── kubernetes/
+│   └── terraform/
+│
+├── scripts/                    # Utility scripts
+│   ├── deploy.sh
+│   └── seed-database.py
+│
+└── docs/                       # Documentation
+```
+
+## 🛠️ Development Setup
+
+### Backend Development
+
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run migrations
+alembic upgrade head
+
+# Start development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Frontend Development
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+### Running Tests
+
+```bash
+# Backend tests
+cd backend
+pytest tests/ -v --cov=app
+
+# Frontend tests
+cd frontend
+npm run test
+```
+
+## 🔧 Configuration Options
+
+### AI Provider Configuration
+
+VisionWire supports multiple AI providers:
+
+**Anthropic Claude (Recommended)**
+```env
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your_api_key
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+```
+
+**OpenAI GPT**
+```env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_api_key
+OPENAI_MODEL=gpt-4-turbo-preview
+```
+
+**Local Ollama**
+```env
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama2
+```
+
+### Storage Configuration
+
+**AWS S3**
+```env
+STORAGE_PROVIDER=s3
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_S3_BUCKET=visionwire-content
+```
+
+**Cloudflare R2**
+```env
+STORAGE_PROVIDER=r2
+R2_ACCOUNT_ID=your_account
+R2_ACCESS_KEY_ID=your_key
+R2_SECRET_ACCESS_KEY=your_secret
+```
+
+## 📊 API Documentation
+
+Once the backend is running, visit:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+### Key API Endpoints
+
+**Authentication**
+- `POST /api/v1/auth/register` - User registration
+- `POST /api/v1/auth/login` - User login
+- `GET /api/v1/auth/me` - Get current user
+
+**Curriculum**
+- `GET /api/v1/curriculum/boards` - List all boards
+- `GET /api/v1/curriculum/subjects` - Get subjects
+- `GET /api/v1/curriculum/tree` - Get curriculum tree
+- `GET /api/v1/curriculum/learning-path` - Get personalized path
+
+**Content Generation**
+- `POST /api/v1/content/generate/notes` - Generate notes
+- `POST /api/v1/content/generate/summary` - Generate summary
+- `POST /api/v1/content/generate/package` - Generate full package
+
+**Assessments**
+- `POST /api/v1/assessments/create` - Create assessment
+- `POST /api/v1/assessments/{id}/start` - Start assessment
+- `POST /api/v1/assessments/attempt/{id}/submit` - Submit assessment
+
+## 🚢 Production Deployment
+
+### Docker Swarm
+
+```bash
+# Initialize swarm
+docker swarm init
+
+# Deploy stack
+docker stack deploy -c infrastructure/docker/docker-compose.yml visionwire
+```
+
+### Kubernetes
+
+```bash
+# Apply all manifests
+kubectl apply -f infrastructure/kubernetes/
+
+# Check status
+kubectl get pods -n visionwire
+```
+
+### Environment Variables for Production
+
+```env
+ENVIRONMENT=production
+DEBUG=false
+SECRET_KEY=<strong-random-key>
+DATABASE_URL=postgresql://user:pass@prod-db:5432/visionwire
+REDIS_URL=redis://prod-redis:6379/0
+SENTRY_DSN=your_sentry_dsn
+CDN_URL=https://cdn.visionwire.com
+```
+
+## 🔐 Security Best Practices
+
+1. **Change all default passwords** in production
+2. **Use strong SECRET_KEY** (32+ characters)
+3. **Enable HTTPS** with valid SSL certificates
+4. **Configure CORS** properly for your domain
+5. **Set up rate limiting** to prevent abuse
+6. **Enable Sentry** for error tracking
+7. **Regular database backups**
+8. **Keep dependencies updated**
+
+## 📈 Monitoring & Logging
+
+### Prometheus Metrics
+
+Access metrics at: http://localhost:9090
+
+### Grafana Dashboards
+
+```bash
+docker-compose -f infrastructure/docker/docker-compose.monitoring.yml up -d
+```
+
+Access Grafana at: http://localhost:3001 (admin/admin)
+
+### Logs
+
+```bash
+# View all logs
+docker-compose logs -f
+
+# View specific service
+docker-compose logs -f backend
+
+# View last 100 lines
+docker-compose logs --tail=100 backend
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [FastAPI](https://fastapi.tiangolo.com/)
+- Frontend powered by [Next.js](https://nextjs.org/)
+- AI capabilities by [Anthropic Claude](https://www.anthropic.com/)
+- UI components from [shadcn/ui](https://ui.shadcn.com/)
+
+## 📞 Support
+
+- **Documentation**: https://docs.visionwire.com
+- **Email**: support@visionwire.com
+- **Issues**: https://github.com/yourusername/visionwire-edtech/issues
+- **Discord**: https://discord.gg/visionwire
+
+---
+
+**Made with ❤️ by the VisionWire Team**

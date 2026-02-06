@@ -1,0 +1,32 @@
+{
+  "name": "you-pdf",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "db:migrate": "cd config/supabase && supabase db push",
+    "workers:dev": "cd apps/workers && npm run dev",
+    "web:dev": "cd apps/web && npm run dev"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "prettier": "^3.1.0",
+    "turbo": "^1.11.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

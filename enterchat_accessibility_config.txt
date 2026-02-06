@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeNotificationStateChanged|typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagReportViewIds|flagRetrieveInteractiveWindows|flagRequestAccessibilityButton"
+    android:canRequestEnhancedWebAccessibility="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100"
+    android:packageNames="com.whatsapp,org.telegram.messenger,com.tencent.mm,com.instagram.android,com.facebook.orca,org.thoughtcrime.securesms,com.discord,com.Slack,com.twitter.android"
+    android:settingsActivity="com.enterchat.MainActivity" />
+
+<!-- android/app/src/main/res/values/strings.xml -->
+<resources>
+    <string name="app_name">EnterChat</string>
+    <string name="accessibility_service_description">
+        EnterChat Bridge Service allows you to access all your messaging apps from within EnterChat. 
+        It reads message notifications and helps automate message sending across different apps.
+        
+        This service requires accessibility permissions to:
+        • Read incoming messages from WhatsApp, Telegram, and other apps
+        • Send messages on your behalf
+        • Access app UI to retrieve conversation lists
+        
+        Your data is encrypted and never leaves your device.
+    </string>
+    <string name="notification_channel_name">EnterChat Bridge</string>
+    <string name="notification_channel_description">Background synchronization service</string>
+</resources>
+
+<!-- android/app/src/main/res/xml/file_paths.xml -->
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-path name="external_files" path="." />
+    <cache-path name="cache" path="." />
+    <files-path name="files" path="." />
+</paths>

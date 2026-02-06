@@ -1,0 +1,545 @@
+# Neon Beat Dash - Complete Project Structure
+
+## 📁 Directory Tree
+
+```
+neon-beat-dash/
+│
+├── game/                           # Main web game application
+│   ├── public/                     # Static assets
+│   │   ├── icons/                  # PWA icons
+│   │   │   ├── icon-192.png        # 192x192 icon
+│   │   │   ├── icon-512.png        # 512x512 icon
+│   │   │   └── generate-icons.html # Icon generator tool
+│   │   ├── favicon.ico             # Browser favicon
+│   │   └── manifest.webmanifest    # PWA manifest
+│   │
+│   ├── src/                        # Source code
+│   │   ├── scenes/                 # Phaser game scenes
+│   │   │   ├── BootScene.ts        # Initial boot and setup
+│   │   │   ├── PreloadScene.ts     # Asset loading with progress
+│   │   │   ├── MenuScene.ts        # Main menu UI
+│   │   │   ├── GameScene.ts        # Core gameplay loop
+│   │   │   ├── UIScene.ts          # Overlay UI (score, combo)
+│   │   │   └── GameOverScene.ts    # End screen and results
+│   │   │
+│   │   ├── core/                   # Core game managers
+│   │   │   ├── GameState.ts        # Central state manager
+│   │   │   ├── AudioManager.ts     # Sound and music system
+│   │   │   ├── InputManager.ts     # Touch/keyboard input handler
+│   │   │   ├── DifficultyManager.ts # Dynamic difficulty scaling
+│   │   │   └── DailyChallenge.ts   # Daily challenge system
+│   │   │
+│   │   ├── services/               # Backend and data services
+│   │   │   ├── SupabaseClient.ts   # Supabase connection
+│   │   │   ├── LeaderboardService.ts # Score submission/retrieval
+│   │   │   ├── UserService.ts      # User management
+│   │   │   └── StorageService.ts   # Local storage wrapper
+│   │   │
+│   │   ├── ui/                     # UI components
+│   │   │   ├── Button.ts           # Reusable button component
+│   │   │   └── TextStyles.ts       # Typography definitions
+│   │   │
+│   │   ├── assets/                 # Game assets (placeholder)
+│   │   │   └── (audio files would go here)
+│   │   │
+│   │   ├── main.ts                 # Game entry point
+│   │   └── gameConfig.ts           # Global configuration
+│   │
+│   ├── index.html                  # HTML entry point
+│   ├── vite.config.ts              # Vite bundler config
+│   ├── package.json                # Dependencies
+│   ├── tsconfig.json               # TypeScript config
+│   ├── tsconfig.node.json          # Node TypeScript config
+│   ├── .env.example                # Environment template
+│   └── .env                        # Local environment (not in git)
+│
+├── mobile/                         # Capacitor mobile wrapper
+│   ├── android/                    # Android native project
+│   │   ├── app/
+│   │   │   ├── src/main/
+│   │   │   │   ├── res/            # Android resources
+│   │   │   │   │   ├── values/
+│   │   │   │   │   │   └── strings.xml
+│   │   │   │   │   └── mipmap-*/   # App icons (multiple densities)
+│   │   │   │   └── AndroidManifest.xml
+│   │   │   └── build.gradle        # App-level Gradle config
+│   │   ├── gradle/                 # Gradle wrapper
+│   │   ├── build.gradle            # Project-level Gradle config
+│   │   └── settings.gradle         # Gradle settings
+│   │
+│   ├── capacitor.config.ts         # Capacitor configuration
+│   └── package.json                # Mobile dependencies
+│
+├── infra/                          # Deployment configurations
+│   ├── netlify.toml                # Netlify deploy config
+│   └── vercel.json                 # Vercel deploy config
+│
+├── supabase-schema.sql             # Database schema + functions
+├── README.md                       # Main documentation
+├── DEPLOYMENT-GUIDE.md             # Deployment instructions
+├── PROJECT-STRUCTURE.md            # This file
+└── .gitignore                      # Git ignore rules
+```
+
+## 📝 File Descriptions
+
+### Core Application Files
+
+#### `game/src/main.ts`
+- **Purpose**: Application entry point
+- **Responsibilities**:
+  - Initialize Phaser game instance
+  - Configure scenes
+  - Setup visibility change handlers
+  - Remove loading screen
+
+#### `game/src/gameConfig.ts`
+- **Purpose**: Centralized configuration
+- **Contains**:
+  - Lane positions and dimensions
+  - Player properties
+  - Obstacle settings
+  - Beat ring timing windows
+  - Difficulty scaling parameters
+  - Scoring formulas
+  - Color theme
+
+### Scene Architecture
+
+#### `BootScene.ts`
+- **Lifecycle**: First scene to run
+- **Duration**: Instant
+- **Purpose**: Set scale mode and orientation
+- **Next Scene**: PreloadScene
+
+#### `PreloadScene.ts`
+- **Lifecycle**: Runs once at startup
+- **Duration**: Until assets loaded
+- **Purpose**: Load/generate all game assets
+- **Features**:
+  - Progress bar
+  - Procedural texture generation
+  - Loading text
+- **Next Scene**: MenuScene
+
+#### `MenuScene.ts`
+- **Lifecycle**: Main hub, returns here after games
+- **Purpose**: Navigation and high-level stats
+- **Features**:
+  - Play button (normal mode)
+  - Daily challenge button
+  - Leaderboard modal
+  - Settings modal
+  - Best score display
+  - User initialization
+- **Next Scene**: GameScene (with mode selected)
+
+#### `GameScene.ts`
+- **Lifecycle**: Active during gameplay
+- **Purpose**: Core game loop
+- **Features**:
+  - Player movement (3 lanes)
+  - Obstacle spawning and movement
+  - Beat ring spawning and detection
+  - Collision detection
+  - Difficulty scaling
+  - Score calculation
+  - RNG seeding (for daily challenges)
+- **Next Scene**: GameOverScene (on death)
+
+#### `UIScene.ts`
+- **Lifecycle**: Overlay during GameScene
+- **Purpose**: HUD and pause menu
+- **Features**:
+  - Live score display
+  - Combo counter
+  - Pause button
+  - Pause menu (resume/quit)
+- **Communicates with**: GameScene via events
+
+#### `GameOverScene.ts`
+- **Lifecycle**: After game ends
+- **Purpose**: Results and options
+- **Features**:
+  - Final score display
+  - Stats breakdown (time, distance, perfect beats)
+  - New best indicator
+  - Top 5 leaderboard
+  - Score submission
+  - Play again / Share / Menu buttons
+- **Next Scene**: GameScene or MenuScene
+
+### Core Managers
+
+#### `GameState.ts`
+- **Pattern**: Singleton
+- **Purpose**: Central data store
+- **Manages**:
+  - User ID and display name
+  - Best score (persistent)
+  - Last game stats (temporary)
+  - Game mode (normal/daily)
+  - Current seed
+  - Audio settings
+- **Storage**: Uses StorageService for persistence
+
+#### `AudioManager.ts`
+- **Pattern**: Singleton
+- **Purpose**: Audio playback
+- **Features**:
+  - BGM loop (beat pattern)
+  - SFX (perfect, good, collision, move)
+  - Web Audio API synthesis (no files needed)
+  - Mute/unmute
+  - Volume control
+- **Note**: Uses procedural audio to avoid asset files
+
+#### `InputManager.ts`
+- **Purpose**: Unified input handling
+- **Supports**:
+  - Touch swipes (left/right)
+  - Touch taps (left/right screen zones)
+  - Keyboard arrows (left/right)
+  - Keyboard A/D keys
+- **Callbacks**: Provides event callbacks for scene
+
+#### `DifficultyManager.ts`
+- **Purpose**: Progressive difficulty
+- **Adjusts**:
+  - Obstacle speed (increases over time)
+  - Spawn interval (decreases over time)
+- **Caps**: Maximum speed and minimum interval
+- **Updates**: Every 10 seconds (configurable)
+
+#### `DailyChallenge.ts`
+- **Purpose**: Synchronized daily patterns
+- **Features**:
+  - Fetch/create daily seed from Supabase
+  - Cache seeds locally
+  - Generate deterministic seeds if offline
+- **Ensures**: All players get same pattern each day
+
+### Services
+
+#### `SupabaseClient.ts`
+- **Pattern**: Singleton
+- **Purpose**: Database connection
+- **Features**:
+  - Reads env variables
+  - Graceful fallback if unconfigured
+  - Mock client for offline development
+- **Used by**: All other services
+
+#### `LeaderboardService.ts`
+- **Purpose**: Score management
+- **Methods**:
+  - `submitScore()`: Send score with validation
+  - `getTopScores()`: Fetch normal leaderboard
+  - `getDailyTopScores()`: Fetch daily leaderboard
+- **Security**:
+  - Client-side validation
+  - Score obfuscation
+  - Anti-cheat checks
+
+#### `UserService.ts`
+- **Purpose**: User identity
+- **Methods**:
+  - `initializeUser()`: Create or load user
+  - `createAnonymousUser()`: Generate random user
+  - `updateDisplayName()`: Change name
+- **Features**:
+  - Auto-generates fun usernames
+  - Persists user ID locally
+  - Syncs with Supabase
+  - Fallback to local-only mode
+
+#### `StorageService.ts`
+- **Purpose**: LocalStorage wrapper
+- **Features**:
+  - Key prefixing (namespace)
+  - JSON serialization
+  - Type-safe getters
+  - Error handling
+- **Stores**: Settings, user data, best score
+
+### UI Components
+
+#### `Button.ts`
+- **Type**: Phaser GameObject Container
+- **Features**:
+  - Background image
+  - Text label
+  - Hover effects (scale, tint)
+  - Click callback
+  - Pulse animation
+  - Enable/disable state
+- **Usage**: All clickable buttons in menus
+
+#### `TextStyles.ts`
+- **Purpose**: Typography consistency
+- **Defines**: Font sizes, colors, styles for:
+  - Titles
+  - Scores
+  - Combos
+  - Normal text
+  - Buttons
+  - Accents
+
+### Configuration Files
+
+#### `package.json`
+- **Dependencies**:
+  - `phaser`: Game engine
+  - `@supabase/supabase-js`: Backend client
+- **Dev Dependencies**:
+  - `typescript`: Type checking
+  - `vite`: Bundler
+  - `vite-plugin-pwa`: PWA support
+- **Scripts**:
+  - `dev`: Development server
+  - `build`: Production build
+  - `preview`: Preview build
+
+#### `vite.config.ts`
+- **Bundler**: Vite configuration
+- **Plugins**: PWA plugin with workbox
+- **Build**: Optimization settings
+  - Code splitting (Phaser, Supabase)
+  - Minification
+  - Asset handling
+- **PWA**: Manifest and service worker config
+
+#### `tsconfig.json`
+- **TypeScript**: Compiler options
+- **Target**: ES2020
+- **Module**: ESNext (for Vite)
+- **Strict**: Enabled for type safety
+- **Paths**: Alias support (@/*)
+
+### Backend
+
+#### `supabase-schema.sql`
+- **Tables**:
+  - `users`: Player profiles
+  - `scores`: Game results
+  - `daily_challenges`: Daily seeds
+- **Indexes**: For query performance
+- **RLS**: Row-level security policies
+- **Functions**:
+  - `submit_score()`: Validated score insertion
+  - `get_top_scores()`: Leaderboard query
+- **Views**:
+  - `daily_leaderboard`: Today's rankings
+
+### Mobile
+
+#### `capacitor.config.ts`
+- **App ID**: Bundle identifier
+- **App Name**: Display name
+- **Web Dir**: Points to game/dist
+- **Plugins**:
+  - Splash screen settings
+  - Status bar (dark mode)
+  - Keyboard behavior
+
+#### `mobile/package.json`
+- **Dependencies**: Capacitor plugins
+  - Core, Android, iOS
+  - Share, Haptics, Status Bar
+- **Scripts**:
+  - `build:mobile`: Build web + copy to Capacitor
+  - `sync`: Sync web assets to native
+  - `open:android`: Open Android Studio
+
+### Infrastructure
+
+#### `netlify.toml`
+- **Build**: Command and directory
+- **Redirects**: SPA routing
+- **Headers**: Security and caching
+- **Optimization**: Compression, minification
+
+#### `vercel.json`
+- **Build**: Custom build command
+- **Output**: Directory specification
+- **Rewrites**: SPA support
+- **Headers**: Security headers
+
+## 🔄 Data Flow
+
+### Game Start Flow
+```
+main.ts → BootScene → PreloadScene → MenuScene
+                                    ↓
+                         UserService.initializeUser()
+                                    ↓
+                         GameState.setUserId()
+```
+
+### Gameplay Flow
+```
+MenuScene (select mode) → GameScene + UIScene
+                             ↓
+                    InputManager (touch/keyboard)
+                             ↓
+                    Player moves between lanes
+                             ↓
+                    Obstacles/BeatRings spawn (RNG)
+                             ↓
+                    Collision detection
+                             ↓
+                    Score calculation → UIScene.update
+                             ↓
+                    Death → GameOverScene
+```
+
+### Score Submission Flow
+```
+GameOverScene → LeaderboardService.submitScore()
+                    ↓
+            Validation (client-side)
+                    ↓
+            Obfuscation
+                    ↓
+            SupabaseClient.from('scores').insert()
+                    ↓
+            submit_score() function (server-side validation)
+                    ↓
+            Database insertion
+```
+
+### Daily Challenge Flow
+```
+MenuScene (Daily Challenge button)
+    ↓
+DailyChallenge.getDailySeed()
+    ↓
+Check local cache → If found, return
+    ↓
+Fetch from Supabase → If found, cache and return
+    ↓
+Create new seed → Insert to Supabase → Cache → Return
+    ↓
+GameState.setCurrentSeed()
+    ↓
+GameScene (uses seed for RNG)
+```
+
+## 🎮 Gameplay Mechanics
+
+### Lane System
+- **Lanes**: 3 (left, center, right)
+- **Positions**: Defined in gameConfig.lanes.positions
+- **Movement**: Smooth interpolation between lanes
+- **Input**: Swipe or tap to move
+
+### Obstacle System
+- **Spawn**: Random lane based on RNG seed
+- **Speed**: Increases with difficulty
+- **Interval**: Decreases with difficulty
+- **Collision**: Instant game over if same lane as player
+
+### Beat Ring System
+- **Spawn**: Random lane, synced intervals
+- **Timing Windows**:
+  - Perfect: ±100ms
+  - Good: ±200ms
+  - Miss: Outside window
+- **Scoring**:
+  - Perfect: 100 × combo multiplier
+  - Good: 50 × combo multiplier
+  - Miss: Resets combo
+
+### Combo System
+- **Max Combo**: 5
+- **Multipliers**: [1, 1.5, 2, 3, 5]
+- **Reset**: On miss or collision
+
+### Difficulty Scaling
+- **Time-based**: Every 10 seconds
+- **Speed**: +0.5 per interval (max 12)
+- **Spawn Rate**: -50ms per interval (min 800ms)
+
+## 🔐 Security Features
+
+### Client-Side
+- Input validation
+- Score range checks
+- Obfuscation before transmission
+
+### Server-Side (Supabase)
+- RLS policies (users can only insert own scores)
+- `submit_score()` function validation:
+  - Score/duration ratio check
+  - Perfect beats sanity check
+  - Negative value rejection
+- Rate limiting (Supabase default)
+
+### Anti-Cheat
+- Deterministic seeds (daily challenge)
+- Server-side score validation
+- Impossible score detection
+- Duration-based max score calculation
+
+## 🚀 Build Pipeline
+
+### Development
+```
+npm run dev → Vite dev server → Hot reload
+```
+
+### Production Web
+```
+npm run build → TypeScript compile → Vite bundle
+    → dist/ (optimized)
+    → Code splitting
+    → Minification
+    → Tree shaking
+```
+
+### Mobile Android
+```
+npm run build (web)
+    ↓
+dist/ created
+    ↓
+npx cap copy → Copies to mobile/android/app/src/main/assets/
+    ↓
+npx cap sync → Updates native dependencies
+    ↓
+Android Studio → Gradle build → APK/AAB
+```
+
+## 📦 Asset Generation
+
+All visual assets are procedurally generated at runtime:
+
+- **Player**: Neon circle with glow
+- **Obstacles**: Colored rounded squares
+- **Beat Rings**: Outlined circles
+- **Particles**: Small dots for trails
+- **Buttons**: Rounded rectangles with border
+- **Background**: Animated grid lines
+
+This eliminates the need for image files and keeps bundle size minimal.
+
+## 🎨 Theme System
+
+Colors defined in `gameConfig.colors`:
+- **Primary**: Cyan (#00ffff) - Player, UI accents
+- **Secondary**: Magenta (#ff00ff) - Obstacles
+- **Accent**: Yellow (#ffff00) - Perfect beats
+- **Background**: Black (#000000)
+- **Text**: White (#ffffff)
+
+All can be changed in one place for easy theming.
+
+---
+
+**This structure enables**:
+- ✅ Modular, maintainable code
+- ✅ Easy feature additions
+- ✅ Straightforward debugging
+- ✅ Quick deployment
+- ✅ Scalable architecture
